@@ -17,6 +17,32 @@ final class CameraManager: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
         session.isRunning
     }
 
+    override init() {
+        super.init()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(cameraChanged),
+            name: .AVCaptureDeviceWasConnected,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(cameraChanged),
+            name: .AVCaptureDeviceWasDisconnected,
+            object: nil
+        )
+    }
+
+    @objc private func cameraChanged(_ notification: Notification) {
+        guard isRunning else { return }
+        let newPreferred = preferredCamera()?.localizedName ?? "None"
+        let current = activeCamera
+        if newPreferred != current {
+            print("SwipeControl: Camera change detected (\(current) → \(newPreferred)), restarting...")
+            restartCapture()
+        }
+    }
+
     func startCapture() {
         guard !session.isRunning else { return }
 
@@ -57,6 +83,19 @@ final class CameraManager: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
     func stopCapture() {
         guard session.isRunning else { return }
         session.stopRunning()
+        for input in session.inputs {
+            session.removeInput(input)
+        }
+        for output in session.outputs {
+            session.removeOutput(output)
+        }
+    }
+
+    private func restartCapture() {
+        stopCapture()
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.startCapture()
+        }
     }
 
     // MARK: - Camera Selection
